@@ -1,10 +1,12 @@
 <#
 .SYNOPSIS
-    This script recursively reads files in a specified folder and its subdirectories.
+    This script recursively reads files in a specified folder and its subdirectories, finding read errors.
 .DESCRIPTION
-    It reads each file in chunks and outputs success or error messages for each file.
+    Read errors are written to the console and optionally a file.
 .PARAMETER folderPath
     Specifies the folder path to start the recursive operation.
+.PARAMETER outputFileName
+    Specifies the optional output file.
 .EXAMPLE
     .\list-unreadable-files.ps1 -folderPath "C:\Path\To\Your\Folder"
     Runs the script on the specified folder and its subdirectories.
@@ -35,19 +37,20 @@ $global:buffer = [byte[]]::new($global:chunkSize)
 
 function Update-ProgressWithThroughput($filePath) {
     $elapsedTime = (Get-Date) - $global:startTime
-    $throughputMBps = $global:readBytes / $elapsedTime.TotalSeconds / (1000*1000)
-    $remainingSeconds = ($global:totalBytes - $global:readBytes) / $throughputMBps
-    $remainingTime = New-Object TimeSpan 0, 0, 0, [math]::Ceiling($remainingSeconds)
-    $status = "{0}!{1}/{2}  {3:N2}/{4:N2} GB  {5:N2}MB/s {6}  {7}" -f `
+    $throughputBps = $global:readBytes / $elapsedTime.TotalSeconds
+    $remainingSeconds = ($global:totalBytes - $global:readBytes) / [math]::Max($throughputBps, 1)
+    $throughputMBps = $throughputBps / (1000*1000)
+    $remainingTime = New-TimeSpan -Seconds $remainingSeconds
+    $status = "{0}!{1}/{2}  {3:N2}/{4:N2} GB  {5:N2}MB/s  {6}  {7}" -f `
         $global:numErrors, ` # 0
         $global:readItems, ` # 1
         $global:totalItems, ` #2
         ($global:readBytes / (1000*1000*1000)), ` # 3
         $global:totalGB, ` # 4
         $throughputMBps, ` # 5
-        $remainingTime.ToString("-hh\:mm\:ss") ` # 6
+        $remainingTime.ToString("hh\:mm\:ss"), ` # 6
         $filePath # 7
-    Write-Progress -Status $status -PercentComplete ($readBytes * 100.0 / $totalBytes)
+    Write-Progress -Activity "/" -Status $status -PercentComplete ($readBytes * 100.0 / $totalBytes)
 }
 
 function ReadFile($filePath) {
