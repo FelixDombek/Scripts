@@ -39,14 +39,13 @@ function Update-ProgressWithThroughput($filePath) {
     $elapsedTime = (Get-Date) - $global:startTime
     $throughputBps = $global:readBytes / $elapsedTime.TotalSeconds
     $remainingSeconds = [math]::Min(($global:totalBytes - $global:readBytes) / [math]::Max($throughputBps, 1), [Int32]::MaxValue)
-    $throughputMBps = $throughputBps / (1000*1000)
     $status = "{0}!{1}/{2}  {3:N2}/{4:N2}GB  {5:N2}MB/s  {6}  {7}" -f `
         $global:numErrors, ` # 0
         $global:readItems, ` # 1
         $global:totalItems, ` #2
         ($global:readBytes / (1000*1000*1000)), ` # 3
         $global:totalGB, ` # 4
-        $throughputMBps, ` # 5
+        ($throughputBps / (1000*1000)), ` # 5
         (New-TimeSpan -Seconds $remainingSeconds).ToString("hh\:mm\:ss"), ` # 6
         $filePath # 7
     Write-Progress -Activity "█" -Status $status -PercentComplete ($readBytes * 100.0 / $totalBytes)
