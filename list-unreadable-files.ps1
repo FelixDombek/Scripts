@@ -38,10 +38,10 @@ $global:buffer = [byte[]]::new($global:chunkSize)
 function Update-ProgressWithThroughput($filePath) {
     $elapsedTime = (Get-Date) - $global:startTime
     $throughputBps = $global:readBytes / $elapsedTime.TotalSeconds
-    $remainingSeconds = ($global:totalBytes - $global:readBytes) / [math]::Max($throughputBps, 1)
+    $remainingSeconds = [math]::Min(($global:totalBytes - $global:readBytes) / [math]::Max($throughputBps, 1), [Int32]::MaxValue)
     $throughputMBps = $throughputBps / (1000*1000)
     $remainingTime = New-TimeSpan -Seconds $remainingSeconds
-    $status = "{0}!{1}/{2}  {3:N2}/{4:N2} GB  {5:N2}MB/s  {6}  {7}" -f `
+    $status = "{0}!{1}/{2}  {3:N2}/{4:N2}GB  {5:N2}MB/s  {6}  {7}" -f `
         $global:numErrors, ` # 0
         $global:readItems, ` # 1
         $global:totalItems, ` #2
@@ -50,7 +50,7 @@ function Update-ProgressWithThroughput($filePath) {
         $throughputMBps, ` # 5
         $remainingTime.ToString("hh\:mm\:ss"), ` # 6
         $filePath # 7
-    Write-Progress -Activity "/" -Status $status -PercentComplete ($readBytes * 100.0 / $totalBytes)
+    Write-Progress -Activity "█" -Status $status -PercentComplete ($readBytes * 100.0 / $totalBytes)
 }
 
 function ReadFile($filePath) {
