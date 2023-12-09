@@ -22,32 +22,45 @@ param (
     [Parameter(Mandatory=$true)][string]$folderPath2
 )
 
+$scriptPath = ".\Get-ChildItemsProgress.ps1"
+. $scriptPath
+
 # Function to normalize paths
-function Normalize-Path($path) {
+function Canonicalize-Path($path) {
     return (Get-Item -LiteralPath $path).FullName
 }
 
 # Function to get relative path
 function Get-RelativePath($basePath, $fullPath) {
-    $basePath = Normalize-Path $basePath
-    $fullPath = Normalize-Path $fullPath
-    return $fullPath.Substring($basePath.Length + 1)
+    $basePath = Canonicalize-Path $basePath
+    $fullPath = Canonicalize-Path $fullPath
+
+    return $fullPath.Substring($basePath.Length + [int]!$basePath.EndsWith("\"))
 }
 
-function Compare-Directories($folderPath1, $folderPath2) {
+function List-Directories($folderPath1, $folderPath2) {
     $scriptBlock = {
         param ($folderPath)
 
-        $files = Get-ChildItem -Path $folderPath -Recurse -Force -Attributes !Directory
+        # Use the imported function
+        $files = Get-ChildItemsRec -FolderPath $folderPath -noProgress $true
         return $files
     }
 
-    $job1 = Start-Job -ScriptBlock $scriptBlock -ArgumentList $folderPath1
-    $job2 = Start-Job -ScriptBlock $scriptBlock -ArgumentList $folderPath2
+    $initScriptBlock = [scriptblock]::Create((Get-Content $scriptPath -Raw))
 
-    Write-Progress -Activity "Listing files" -Status $folderPath1 -PercentComplete 0
+    $job1 = Start-ThreadJob -ScriptBlock $scriptBlock -ArgumentList $folderPath1 -InitializationScript $initScriptBlock
+    $job2 = Start-ThreadJob -ScriptBlock $scriptBlock -ArgumentList $folderPath2 -InitializationScript $initScriptBlock
+
+    Write-Progress -Activity "Listing files" -Status $folderPath1 -PercentComplete 5
+
+    $null = Wait-Job -Any $job1, $job2
+    
+    Write-Progress -Activity "Listing files" -Status $folderPath2 -PercentComplete 35
+
+    $null = Wait-Job $job1, $job2
+
     $files1 = Receive-Job -Job $job1 -Wait
-    Write-Progress -Activity "Listing files" -Status $folderPath2 -PercentComplete 50
     $files2 = Receive-Job -Job $job2 -Wait
 
     Remove-Job -Job $job1
@@ -57,7 +70,11 @@ function Compare-Directories($folderPath1, $folderPath2) {
 }
 
 # Get file lists for both directories in parallel
-$files1, $files2 = Compare-Directories $folderPath1 $folderPath2
+$files1, $files2 = List-Directories $folderPath1 $folderPath2
+Write-Progress -Activity "Listing files done" -Status $folderPath2 -PercentComplete 100
+
+#$files1 = Get-ChildItemsRec -FolderPath $folderPath1
+#$files2 = Get-ChildItemsRec -FolderPath $folderPath2
 
 # Initialize indices
 $index1 = 0
@@ -68,10 +85,10 @@ $countTotal = $count1 + $count2
 
 while ($index1 -lt $files1.Count -and $index2 -lt $files2.Count) {    
     $file1 = $files1[$index1]
-    $file2 = $files2[$index2]
+    $file2 = $files2[$index2]    
 
     $relativePath1 = Get-RelativePath $folderPath1 $file1.FullName
-    $relativePath2 = Get-RelativePath $folderPath2 $file2.FullName    
+    $relativePath2 = Get-RelativePath $folderPath2 $file2.FullName
 
     if ($relativePath1 -eq $relativePath2) {
         # Files have the same relative path
